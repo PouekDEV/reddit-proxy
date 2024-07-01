@@ -10,16 +10,12 @@ load_dotenv()
 app = Flask("reddit-proxy")
 # We need these just in case reddit blocked our IP
 cookies = {
-    "__stripe_mid": os.getenv("STRIPE_MID"),
     "csv": os.getenv("CSV"),
     "edgebucket": os.getenv("EDGEBUCKET"),
     "loid": os.getenv("LOID"),
-    "pc": os.getenv("PC"),
     "rdt": os.getenv("RDT"),
     "reddit_session": os.getenv("REDDIT_SESSION"),
-    "session": os.getenv("SESSION"),
     "token_v2": os.getenv("TOKEN_V2"),
-    "USER": os.getenv("USER")
 }
 headers = {
     'User-Agent': 'linux:https://github.com/PouekDEV/reddit-proxy:v1.0.0 (by /u/Pouek_)',
