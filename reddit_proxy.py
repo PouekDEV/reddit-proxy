@@ -39,6 +39,10 @@ def video(path):
     if path == "" or path == None:
         return '<head><meta http-equiv="refresh" content="0; url=https://github.com/PouekDEV/reddit-proxy"></head>'
     try:
+        path.index("reddit")
+    except ValueError:
+        return 'Not a reddit link'
+    try:
         path.index("https://")
     except ValueError:
         path = path.replace("https:/","https://")
@@ -51,7 +55,10 @@ def video(path):
     except KeyError:
         r = requests.get(url=path+".json",cookies=cookies,headers=headers)
         info = json.loads(r.text)[0]["data"]["children"][0]["data"]
-        url = info["media"]["reddit_video"]["fallback_url"]
+        try:
+            url = info["media"]["reddit_video"]["fallback_url"]
+        except TypeError:
+            return 'Video is not hosted on reddit'
         # If it's not a gif we can try and combine the audio and video ourselves
         if not info["media"]["reddit_video"]["is_gif"]:
             audio_url = info["url"]
@@ -66,8 +73,21 @@ def video(path):
             audio = ffmpeg.input(audio_url)
             video = ffmpeg.input(url)
             process = (
-                # We need a better format for this than webm because it's slow to encode
-                ffmpeg.output(audio, video, "pipe:", format="webm").run_async(pipe_stdout=True)
+                ffmpeg.output(
+                        audio,
+                        video,
+                        "pipe:",
+                        format="webm",
+                        vcodec="libvpx",
+                        acodec="libopus",
+                        preset="ultrafast",
+                        crf=20,
+                        **{
+                            'deadline': 'realtime',
+                            'cpu-used': '5',
+                            'threads': 'auto'
+                        }
+                    ).run_async(pipe_stdout=True)
             )
             returnable_result = io.BytesIO()
             out = process.communicate()
@@ -89,6 +109,10 @@ def embed(path):
     if path == "" or path == None:
         return '<head><meta http-equiv="refresh" content="0; url=https://github.com/PouekDEV/reddit-proxy"></head>'
     try:
+        path.index("reddit")
+    except ValueError:
+        return 'Not a reddit link'
+    try:
         path.index("https://")
     except ValueError:
         path = path.replace("https:/","https://")
@@ -100,8 +124,8 @@ def embed(path):
         width = info["media"]["reddit_video"]["width"]
         height = info["media"]["reddit_video"]["width"]
     except TypeError:
-        return 'This post is not a video'
-    return '<head><meta http-equiv="refresh" content="0; url='+path+'"><meta property="og:title" content="'+name+' - '+title+'"><meta property="og:url" content="'+path+'"><meta property="og:video" content="http://'+str(request.host)+'/video'+str(request.full_path)+'"><meta property="og:image" content="http://'+str(request.host)+'/video'+str(request.full_path)+'"><meta property="og:type" content="video"><meta property="og:video:type" content="video/mp4"><meta property="og:video:width" content="'+str(width)+'"><meta property="og:video:height" content="'+str(height)+'"></head>'
+        return 'This post is not a video or the video is not hosted on reddit'
+    return '<head><meta name="theme-color" content="#FF4500"><meta http-equiv="refresh" content="0; url='+path+'"><meta property="og:title" content="'+name+' - '+title+'"><meta property="og:url" content="'+path+'"><meta property="og:video" content="http://'+str(request.host)+'/video'+str(request.full_path)+'"><meta property="og:image" content="http://'+str(request.host)+'/video'+str(request.full_path)+'"><meta property="og:type" content="video"><meta property="og:video:type" content="video/mp4"><meta property="og:video:width" content="'+str(width)+'"><meta property="og:video:height" content="'+str(height)+'"></head>'
 
 if __name__ == "__main__":
     app.run(host=os.getenv("HOST") or '0.0.0.0', port=os.getenv("PORT") or 4443)
