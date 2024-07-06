@@ -24,6 +24,7 @@ headers = {
     'User-Agent': 'linux:https://github.com/PouekDEV/reddit-proxy:v1.1.0 (by /u/Pouek_)',
     'From': 'stuff@pouekdev.one'
 }
+encoding = os.getenv("ENCODING", 'False').lower() in ('true', '1', 't')
 
 @app.route('/robots.txt')
 def robots():
@@ -60,7 +61,7 @@ def video(path):
         except TypeError:
             return 'Video is not hosted on reddit'
         # If it's not a gif we can try and combine the audio and video ourselves
-        if not info["media"]["reddit_video"]["is_gif"]:
+        if not info["media"]["reddit_video"]["is_gif"] and encoding:
             audio_url = info["url"]
             audio_url = audio_url + "/DASH_AUDIO_"
             r = requests.get(url=info["media"]["reddit_video"]["hls_url"])
