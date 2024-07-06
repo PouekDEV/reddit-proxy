@@ -72,27 +72,10 @@ def video(path):
             audio_url = audio_url + best_hls + ".mp4"
             audio = ffmpeg.input(audio_url)
             video = ffmpeg.input(url)
-            process = (
-                ffmpeg.output(
-                        audio,
-                        video,
-                        "pipe:",
-                        format="webm",
-                        vcodec="libvpx",
-                        acodec="libopus",
-                        preset="ultrafast",
-                        crf=20,
-                        **{
-                            'deadline': 'realtime',
-                            'cpu-used': '5',
-                            'threads': 'auto'
-                        }
-                    ).run_async(pipe_stdout=True)
-            )
-            returnable_result = io.BytesIO()
-            out = process.communicate()
-            returnable_result.write(out[0])
-            returnable_result.seek(0)
+            ffmpeg.output(audio, video, "temp.mp4", format="mp4", vcodec="libx264", acodec="copy", crf=27, preset="veryfast").run(overwrite_output=True)
+            file = open("./temp.mp4", "rb")
+            returnable_result = io.BytesIO(file.read())
+            file.close()
         else:
             raw_video = requests.get(url, stream=True).raw
             returnable_result = raw_video
