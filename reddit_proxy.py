@@ -122,7 +122,7 @@ def embed(path):
     title = info["title"]
     try:
         width = info["media"]["reddit_video"]["width"]
-        height = info["media"]["reddit_video"]["width"]
+        height = info["media"]["reddit_video"]["height"]
     except TypeError:
         return 'This post is not a video or the video is not hosted on reddit'
     return '<head><meta name="theme-color" content="#FF4500"><meta http-equiv="refresh" content="0; url='+path+'"><meta property="og:title" content="'+name+' - '+title+'"><meta property="og:url" content="'+path+'"><meta property="og:video" content="http://'+str(request.host)+'/video'+str(request.full_path)+'"><meta property="og:image" content="http://'+str(request.host)+'/video'+str(request.full_path)+'"><meta property="og:type" content="video"><meta property="og:video:type" content="video/mp4"><meta property="og:video:width" content="'+str(width)+'"><meta property="og:video:height" content="'+str(height)+'"></head>'
