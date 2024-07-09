@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 import requests
 import ffmpeg
+import yt_dlp
 import json
 import os
 import re
@@ -25,6 +26,21 @@ headers = {
     'From': 'stuff@pouekdev.one'
 }
 encoding = os.getenv("ENCODING", 'False').lower() in ('true', '1', 't')
+directory = os.getenv("DIRECTORY")
+ydl_opts = {
+    'format': 'bestvideo[ext=mp4]+bestaudio[ext=mp4]/mp4+best[height<=720]',
+    'ignoreerrors': True,
+    'extract_flat': True,
+    'restrictfilenames': True,
+    'noplaylist': True,
+    'outtmpl': directory+"%(title)s.%(ext)s"
+}
+
+# Remove cached files on boot
+files = os.listdir(directory)
+for file in files:
+    if ".mp4" in file:
+        os.remove(directory+file)
 
 @app.route('/robots.txt')
 def robots():
@@ -43,6 +59,10 @@ def video(path):
         return 'Not a reddit link'
     if not "https://" in path:
         path = path.replace("https:/","https://")
+    if not "comments" in path:
+        r = requests.get(url=path,cookies=cookies,headers=headers)
+        soup = BeautifulSoup(r.text, features="html.parser")
+        path = soup.find("shreddit-canonical-url-updater")["value"]
     try:
         r = requests.get(url=path,cookies=cookies,headers=headers)
         soup = BeautifulSoup(r.text, features="html.parser")
@@ -54,23 +74,33 @@ def video(path):
         info = json.loads(r.text)[0]["data"]["children"][0]["data"]
         try:
             url = info["media"]["reddit_video"]["fallback_url"]
+            name = info["id"]
             # If it's not a gif we can try and combine the audio and video ourselves
-            # The encoding still seems to be too slow for discord to display it
-            # As an alternative maybe add downloading the video from yt-dlp?
             if not info["media"]["reddit_video"]["is_gif"] and encoding:
                 audio_url = info["url"]
                 audio_url = audio_url + "/DASH_AUDIO_"
-                r = requests.get(url=info["media"]["reddit_video"]["hls_url"])
+                r = requests.get(url=info["media"]["reddit_video"]["hls_url"],cookies=cookies,headers=headers)
                 best_hls = ""
                 for line in r.text.splitlines():
                     if "#EXT-X-MEDIA" in line:
                         hls = re.search('HLS_AUDIO_(.*).m3u8',line)
                         best_hls = hls.group(1)
                 audio_url = audio_url + best_hls + ".mp4"
-                audio = ffmpeg.input(audio_url)
-                video = ffmpeg.input(url)
-                ffmpeg.output(audio, video, "temp.mp4", format="mp4", vcodec="libx264", acodec="copy", crf=27, preset="veryfast").run(overwrite_output=True)
-                file = open("./temp.mp4", "rb")
+                if not os.path.exists(directory+name+".mp4"):
+                    audio = ffmpeg.input(audio_url)
+                    video = ffmpeg.input(url)
+                    ffmpeg.output(audio, video, directory+name+".mp4", format="mp4", vcodec="libx264", acodec="copy", crf=27, preset="veryfast").run(overwrite_output=True)
+                file = open(directory+name+".mp4", "rb")
+                returnable_result = io.BytesIO(file.read())
+                file.close()
+                return send_file(path_or_file=returnable_result,download_name="reddit_video.mp4")
+            # In case of disabled encoding utilise yt-dlp
+            elif not info["media"]["reddit_video"]["is_gif"]:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(path, download=False)
+                    title = ydl.prepare_filename(info)
+                    ydl.download(path)
+                file = open(title, "rb")
                 returnable_result = io.BytesIO(file.read())
                 file.close()
                 return send_file(path_or_file=returnable_result,download_name="reddit_video.mp4")
@@ -93,6 +123,10 @@ def embed(path):
         return 'Not a reddit link'
     if not "https://" in path:
         path = path.replace("https:/","https://")
+    if not "comments" in path:
+        r = requests.get(url=path,cookies=cookies,headers=headers)
+        soup = BeautifulSoup(r.text, features="html.parser")
+        path = soup.find("shreddit-canonical-url-updater")["value"]
     r = requests.get(url=path+".json",cookies=cookies,headers=headers)
     info = json.loads(r.text)[0]["data"]["children"][0]["data"]
     name = info["subreddit_name_prefixed"]
