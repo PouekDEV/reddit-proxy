@@ -94,16 +94,21 @@ def video(path):
                 returnable_result = io.BytesIO(file.read())
                 file.close()
                 return send_file(path_or_file=returnable_result,download_name="reddit_video.mp4")
-            # In case of disabled encoding utilise yt-dlp
+            # In case of disabled encoding utilize yt-dlp
             elif not info["media"]["reddit_video"]["is_gif"]:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(path, download=False)
                     title = ydl.prepare_filename(info)
-                    ydl.download(path)
-                file = open(title, "rb")
-                returnable_result = io.BytesIO(file.read())
-                file.close()
-                return send_file(path_or_file=returnable_result,download_name="reddit_video.mp4")
+                    if not os.path.exists(title):
+                        ydl.download(path)
+                try:
+                    file = open(title, "rb")
+                    returnable_result = io.BytesIO(file.read())
+                    file.close()
+                    return send_file(path_or_file=returnable_result,download_name="reddit_video.mp4")
+                # Reddit blocked us so proceed with the file without audio
+                except FileNotFoundError:
+                    pass
         except (TypeError, KeyError):
             try:
                 url = info["preview"]["reddit_video_preview"]["fallback_url"]
