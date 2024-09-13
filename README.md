@@ -1,6 +1,6 @@
 # reddit-proxy
 
-Basic flask server for grabbing reddit videos and embedding them on discord. Because nobody wants to open the whole reddit website just for one video.
+Basic flask server for grabbing reddit posts and embedding them on discord. Because nobody wants to open the whole reddit website just for one video/image/gif.
 
 ## How to use?
 

@@ -18,7 +18,7 @@ cookies = {
     "token_v2": os.getenv("TOKEN_V2"),
 }
 headers = {
-    'User-Agent': 'linux:https://github.com/PouekDEV/reddit-proxy:v1.1.0 (by /u/Pouek_)',
+    'User-Agent': 'linux:https://github.com/PouekDEV/reddit-proxy:v1.2.0 (by /u/Pouek_)',
     'From': 'stuff@pouekdev.one'
 }
 encoding = os.getenv("ENCODING", 'False').lower() in ('true', '1', 't')
@@ -77,9 +77,9 @@ def video(path):
         try:
             url = info["media"]["reddit_video"]["fallback_url"]
             name = info["id"]
-            if combine_audio_video:
-                # If it's not a gif we can try and combine the audio and video ourselves
-                if not info["media"]["reddit_video"]["is_gif"] and encoding:
+            # If it's not a gif we can try and combine the audio and video ourselves
+            if combine_audio_video and not info["media"]["reddit_video"]["is_gif"]:
+                if encoding:
                     audio_url = info["url"]
                     audio_url = audio_url + "/DASH_AUDIO_"
                     r = requests.get(url=info["media"]["reddit_video"]["hls_url"],cookies=cookies,headers=headers)
@@ -101,7 +101,7 @@ def video(path):
                     file.close()
                     return send_file(path_or_file=returnable_result,download_name="reddit_video.mp4")
                 # In case of disabled encoding utilize yt-dlp
-                elif not info["media"]["reddit_video"]["is_gif"]:
+                else:
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         info = ydl.extract_info(path, download=False)
                         title = ydl.prepare_filename(info)
@@ -122,7 +122,7 @@ def video(path):
                 try:
                     url = soup.find("shreddit-player")["src"]
                 except (TypeError, KeyError):
-                    return 'Video is not hosted on reddit or the post is not a video'
+                    return 'There was an error finding media in this post'
     return redirect(url, code=302)
 
 @app.route('/', defaults={'path': ''})
@@ -152,15 +152,18 @@ def embed(path):
         height = info["media"]["reddit_video"]["height"]
     except (TypeError, KeyError):
         try:
-            width = info["preview"]["images"][0]["variants"]["gif"]["source"]["width"]
-            height = info["preview"]["images"][0]["variants"]["gif"]["source"]["height"]
+            width = info["preview"]["images"][0]["source"]["width"]
+            height = info["preview"]["images"][0]["source"]["height"]
         except (TypeError, KeyError):
             try:
                 width = info["preview"]["reddit_video_preview"]["width"]
                 height = info["preview"]["reddit_video_preview"]["height"]
             except (TypeError, KeyError):
-                return 'This post is not a video or the video is not hosted on reddit'
-    return '<head><meta name="theme-color" content="#FF4500"><meta http-equiv="refresh" content="0; url='+path+'"><meta property="og:title" content="'+name+' - '+title+'"><meta property="og:url" content="'+path+'"><meta property="og:video" content="http://'+str(request.host)+'/video'+str(request.full_path)+'"><meta property="og:image" content="http://'+str(request.host)+'/video'+str(request.full_path)+'"><meta property="og:type" content="video"><meta property="og:video:type" content="video/mp4"><meta property="og:video:width" content="'+str(width)+'"><meta property="og:video:height" content="'+str(height)+'"></head>'
+                return '<head><meta http-equiv="refresh" content="0; url='+path+'"></head>'
+    if not ".gif" in info["url"][-4:] and not ".jpeg" in info["url"][-5:] and not ".jpg" in info["url"][-4:] and not ".png" in info["url"][-4:]:
+        return '<head><meta name="theme-color" content="#FF4500"><meta http-equiv="refresh" content="0; url='+path+'"><meta property="og:title" content="'+name+' - '+title+'"><meta property="og:url" content="'+path+'"><meta property="og:video" content="http://'+str(request.host)+'/video'+str(request.full_path)+'"><meta property="og:image" content="http://'+str(request.host)+'/video'+str(request.full_path)+'"><meta property="og:type" content="video"><meta property="og:video:type" content="video/mp4"><meta property="og:video:width" content="'+str(width)+'"><meta property="og:video:height" content="'+str(height)+'"></head>'
+    else:
+        return '<head><meta name="theme-color" content="#FF4500"><meta http-equiv="refresh" content="0; url='+path+'"><meta property="og:title" content="'+name+' - '+title+'"><meta property="og:url" content="'+path+'"><meta property="og:image" content="'+info["url"]+'"><meta property="og:type" content="image"><meta property="og:image:type" content="image/gif"><meta property="og:image:width" content="'+str(width)+'"><meta property="og:image:height" content="'+str(height)+'"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image:src" content="'+info["url"]+'"></head>'
 
 if __name__ == "__main__":
     app.run(host=os.getenv("HOST") or '0.0.0.0', port=os.getenv("PORT") or 4443)
