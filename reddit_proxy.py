@@ -18,9 +18,10 @@ cookies = {
     "token_v2": os.getenv("TOKEN_V2"),
 }
 headers = {
-    'User-Agent': 'linux:https://github.com/PouekDEV/reddit-proxy:v1.2.0 (by /u/Pouek_)',
+    'User-Agent': 'linux:https://github.com/PouekDEV/reddit-proxy:v1.2.1 (by /u/Pouek_)',
     'From': 'stuff@pouekdev.one'
 }
+ffmpeg_headers = "User-Agent: linux:https://github.com/PouekDEV/reddit-proxy:v1.2.1 (by /u/Pouek_)\r\n"
 encoding = os.getenv("ENCODING", 'False').lower() in ('true', '1', 't')
 combine_audio_video = os.getenv("COMBINE_AUDIO_VIDEO", 'False').lower() in ('true', '1', 't')
 directory = os.getenv("DIRECTORY")
@@ -63,7 +64,7 @@ def video(path):
     try:
         r = requests.get(url=path,cookies=cookies,headers=headers)
         soup = BeautifulSoup(r.text, features="html.parser")
-        info = json.loads(soup.find("shreddit-player-2")["packaged-media-json"])["playbackMp4s"]["permutations"]
+        info = json.loads(soup.find("shreddit-player-")["packaged-media-json"])["playbackMp4s"]["permutations"]
         url = info[len(info)-1]["source"]["url"]
     # Fallback to a video without sound
     except (TypeError, KeyError):
@@ -90,8 +91,8 @@ def video(path):
                                 hls = re.search('HLS_AUDIO_(.*).m3u8',line)
                                 best_hls = hls.group(1)
                         audio_url = audio_url + best_hls + ".mp4"
-                        audio = ffmpeg.input(audio_url)
-                        video = ffmpeg.input(url)
+                        audio = ffmpeg.input(audio_url,headers=ffmpeg_headers)
+                        video = ffmpeg.input(url,headers=ffmpeg_headers)
                         try:
                             ffmpeg.output(audio, video, directory+name+".mp4", format="mp4", vcodec="copy", acodec="copy", crf=27, preset="veryfast").run(overwrite_output=True)
                         except ffmpeg.Error:
@@ -124,7 +125,7 @@ def video(path):
                 url = info["preview"]["reddit_video_preview"]["fallback_url"]
             except (TypeError, KeyError):
                 try:
-                    url = soup.find("shreddit-player")["src"]
+                    url = soup.find("shreddit-player-2")["src"]
                 except (TypeError, KeyError):
                     return 'There was an error finding media in this post'
     return redirect(url, code=302)
@@ -149,7 +150,7 @@ def embed(path):
         json_path = path + ".json"
     r = requests.get(url=json_path,cookies=cookies,headers=headers)
     info = json.loads(r.text)[0]["data"]["children"][0]["data"]
-    thumbnail = info["thumbnail"].replace("amp;","")
+    thumbnail = info["preview"]["images"][0]["source"]["url"]
     name = info["subreddit_name_prefixed"]
     title = info["title"]
     try:
