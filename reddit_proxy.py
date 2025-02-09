@@ -64,7 +64,7 @@ def video(path):
     try:
         r = requests.get(url=path,cookies=cookies,headers=headers)
         soup = BeautifulSoup(r.text, features="html.parser")
-        info = json.loads(soup.find("shreddit-player-")["packaged-media-json"])["playbackMp4s"]["permutations"]
+        info = json.loads(soup.find("shreddit-player-2")["packaged-media-json"])["playbackMp4s"]["permutations"]
         url = info[len(info)-1]["source"]["url"]
     # Fallback to a video without sound
     except (TypeError, KeyError):
