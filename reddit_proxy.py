@@ -21,7 +21,7 @@ headers = {
     'User-Agent': 'linux:https://github.com/PouekDEV/reddit-proxy:v1.2.1 (by /u/Pouek_)',
     'From': 'stuff@pouekdev.one'
 }
-ffmpeg_headers = "User-Agent: linux:https://github.com/PouekDEV/reddit-proxy:v1.2.1 (by /u/Pouek_)\r\n"
+ffmpeg_headers = "User-Agent: linux:https://github.com/PouekDEV/reddit-proxy:v1.2.2 (by /u/Pouek_)\r\n"
 encoding = os.getenv("ENCODING", 'False').lower() in ('true', '1', 't')
 combine_audio_video = os.getenv("COMBINE_AUDIO_VIDEO", 'False').lower() in ('true', '1', 't')
 directory = os.getenv("DIRECTORY")
@@ -150,26 +150,41 @@ def embed(path):
         json_path = path + ".json"
     r = requests.get(url=json_path,cookies=cookies,headers=headers)
     info = json.loads(r.text)[0]["data"]["children"][0]["data"]
-    thumbnail = info["preview"]["images"][0]["source"]["url"]
+    try:
+        thumbnail = info["preview"]["images"][0]["source"]["url"]
+    except (TypeError, KeyError):
+        thumbnail = ""
     name = info["subreddit_name_prefixed"]
     title = info["title"]
-    try:
-        width = info["media"]["reddit_video"]["width"]
-        height = info["media"]["reddit_video"]["height"]
-    except (TypeError, KeyError):
+    author = info["author"]
+    isgallery = False
+    url = info["url"]
+    if "gallery" in url:
         try:
-            width = info["preview"]["images"][0]["source"]["width"]
-            height = info["preview"]["images"][0]["source"]["height"]
+            url = info["media_metadata"][list(info["media_metadata"].keys())[0]]["s"]["u"]
+            width = info["media_metadata"][list(info["media_metadata"].keys())[0]]["s"]["x"]
+            height = info["media_metadata"][list(info["media_metadata"].keys())[0]]["s"]["y"]
+            isgallery = True
+        except (TypeError, KeyError):
+            pass
+    if not isgallery:
+        try:
+            width = info["media"]["reddit_video"]["width"]
+            height = info["media"]["reddit_video"]["height"]
         except (TypeError, KeyError):
             try:
-                width = info["preview"]["reddit_video_preview"]["width"]
-                height = info["preview"]["reddit_video_preview"]["height"]
+                width = info["preview"]["images"][0]["source"]["width"]
+                height = info["preview"]["images"][0]["source"]["height"]
             except (TypeError, KeyError):
-                return '<head><meta http-equiv="refresh" content="0; url='+path+'"></head>'
+                try:
+                    width = info["preview"]["reddit_video_preview"]["width"]
+                    height = info["preview"]["reddit_video_preview"]["height"]
+                except (TypeError, KeyError):
+                    return '<head><meta http-equiv="refresh" content="0; url='+path+'"></head>'
     if not ".gif" in info["url"][-4:] and not ".jpeg" in info["url"][-5:] and not ".jpg" in info["url"][-4:] and not ".png" in info["url"][-4:]:
-        return '<head><meta name="theme-color" content="#FF4500"><meta http-equiv="refresh" content="0; url='+path+'"><meta property="og:title" content="'+name+' - '+title+'"><meta property="og:url" content="'+path+'"><meta property="og:video" content="http://'+str(request.host)+'/video/'+path+'"><meta property="og:image" content="'+thumbnail+'"><meta property="og:type" content="video"><meta property="og:video:type" content="video/mp4"><meta property="og:video:width" content="'+str(width)+'"><meta property="og:video:height" content="'+str(height)+'"></head>'
+        return '<head><meta name="theme-color" content="#FF4500"><meta http-equiv="refresh" content="0; url='+path+'"><meta property="og:title" content="'+title+'"><meta property="og:url" content="'+path+'"><meta property="og:video" content="http://'+str(request.host)+'/video/'+path+'"><meta property="og:image" content="'+thumbnail+'"><meta property="og:type" content="video"><meta property="og:video:type" content="video/mp4"><meta property="og:video:width" content="'+str(width)+'"><meta property="og:video:height" content="'+str(height)+'"><meta name="twitter:creator" content="u/'+author+' on '+name+'"></head>'
     else:
-        return '<head><meta name="theme-color" content="#FF4500"><meta http-equiv="refresh" content="0; url='+path+'"><meta property="og:title" content="'+name+' - '+title+'"><meta property="og:url" content="'+path+'"><meta property="og:image" content="'+info["url"]+'"><meta property="og:type" content="image"><meta property="og:image:type" content="image/gif"><meta property="og:image:width" content="'+str(width)+'"><meta property="og:image:height" content="'+str(height)+'"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image:src" content="'+info["url"]+'"></head>'
+        return '<head><meta name="theme-color" content="#FF4500"><meta http-equiv="refresh" content="0; url='+path+'"><meta property="og:title" content="'+title+'"><meta property="og:url" content="'+path+'"><meta property="og:image" content="'+url+'"><meta property="og:type" content="image"><meta property="og:image:type" content="image/gif"><meta property="og:image:width" content="'+str(width)+'"><meta property="og:image:height" content="'+str(height)+'"><meta name="twitter:creator" content="u/'+author+' on '+name+'"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image:src" content="'+url+'"></head>'
 
 if __name__ == "__main__":
     app.run(host=os.getenv("HOST") or '0.0.0.0', port=os.getenv("PORT") or 4443)
