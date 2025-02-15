@@ -18,10 +18,10 @@ cookies = {
     "token_v2": os.getenv("TOKEN_V2"),
 }
 headers = {
-    'User-Agent': 'linux:https://github.com/PouekDEV/reddit-proxy:v1.2.1 (by /u/Pouek_)',
+    'User-Agent': 'linux:https://github.com/PouekDEV/reddit-proxy:v1.2.3 (by /u/Pouek_)',
     'From': 'stuff@pouekdev.one'
 }
-ffmpeg_headers = "User-Agent: linux:https://github.com/PouekDEV/reddit-proxy:v1.2.2 (by /u/Pouek_)\r\n"
+ffmpeg_headers = "User-Agent: "+headers["User-Agent"]+"\r\n"
 encoding = os.getenv("ENCODING", 'False').lower() in ('true', '1', 't')
 combine_audio_video = os.getenv("COMBINE_AUDIO_VIDEO", 'False').lower() in ('true', '1', 't')
 directory = os.getenv("DIRECTORY")
@@ -69,8 +69,7 @@ def video(path):
     # Fallback to a video without sound
     except (TypeError, KeyError):
         if "/" == path[-1]:
-            json_path = path[:-1]
-            json_path = json_path + ".json"
+            json_path = path[:-1] + ".json"
         else:
             json_path = path + ".json"
         r = requests.get(url=json_path,cookies=cookies,headers=headers)
@@ -100,7 +99,7 @@ def video(path):
                         file = open(directory+name+".mp4", "rb")
                         returnable_result = io.BytesIO(file.read())
                         file.close()
-                        return send_file(path_or_file=returnable_result,download_name="reddit_video.mp4")
+                        return send_file(path_or_file=returnable_result,download_name=name+".mp4")
                     # In case of disabled encoding utilize yt-dlp
                     else:
                         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -111,7 +110,7 @@ def video(path):
                             file = open(title, "rb")
                             returnable_result = io.BytesIO(file.read())
                             file.close()
-                            return send_file(path_or_file=returnable_result,download_name="reddit_video.mp4")
+                            return send_file(path_or_file=returnable_result,download_name=name+".mp4")
                         # Reddit blocked us so proceed with the file without audio
                         except FileNotFoundError:
                             pass
@@ -119,7 +118,7 @@ def video(path):
                     file = open(directory+name+".mp4", "rb")
                     returnable_result = io.BytesIO(file.read())
                     file.close()
-                    return send_file(path_or_file=returnable_result,download_name="reddit_video.mp4")
+                    return send_file(path_or_file=returnable_result,download_name=name+".mp4")
         except (TypeError, KeyError):
             try:
                 url = info["preview"]["reddit_video_preview"]["fallback_url"]
@@ -143,9 +142,10 @@ def embed(path):
         r = requests.get(url=path,cookies=cookies,headers=headers)
         soup = BeautifulSoup(r.text, features="html.parser")
         path = soup.find("shreddit-canonical-url-updater")["value"]
+    if not "Discordbot" in request.headers.get("User-Agent"):
+        return redirect(path, code=302)
     if "/" == path[-1]:
-        json_path = path[:-1]
-        json_path = json_path + ".json"
+        json_path = path[:-1] + ".json"
     else:
         json_path = path + ".json"
     r = requests.get(url=json_path,cookies=cookies,headers=headers)
@@ -156,18 +156,22 @@ def embed(path):
         thumbnail = ""
     name = info["subreddit_name_prefixed"]
     title = info["title"]
-    author = info["author"]
-    isgallery = False
     url = info["url"]
+    tags = ""
+    image_count = -1
     if "gallery" in url:
         try:
-            url = info["media_metadata"][list(info["media_metadata"].keys())[0]]["s"]["u"]
-            width = info["media_metadata"][list(info["media_metadata"].keys())[0]]["s"]["x"]
-            height = info["media_metadata"][list(info["media_metadata"].keys())[0]]["s"]["y"]
-            isgallery = True
+            if len(info["media_metadata"]) > 4:
+                image_count = 4
+            else:
+                image_count = len(info["media_metadata"])
+            tags = '<meta property="og:type" content="image"><meta name="twitter:card" content="summary_large_image"><meta property="og:description" content="Gallery: '+str(len(info["media_metadata"]))+' Images">'
+            for i in range(image_count):
+                img = info["media_metadata"][list(info["media_metadata"].keys())[i]]
+                tags = tags + '<meta property="og:image" content="'+img["s"]["u"]+'"><meta property="og:image:width" content="'+str(img["s"]["x"])+'"><meta property="og:image:height" content="'+str(img["s"]["y"])+'"><meta name="twitter:image:src" content="'+str(img["s"]["u"])+'">'
         except (TypeError, KeyError):
             pass
-    if not isgallery:
+    else:
         try:
             width = info["media"]["reddit_video"]["width"]
             height = info["media"]["reddit_video"]["height"]
@@ -180,11 +184,13 @@ def embed(path):
                     width = info["preview"]["reddit_video_preview"]["width"]
                     height = info["preview"]["reddit_video_preview"]["height"]
                 except (TypeError, KeyError):
-                    return '<head><meta http-equiv="refresh" content="0; url='+path+'"></head>'
-    if not ".gif" in info["url"][-4:] and not ".jpeg" in info["url"][-5:] and not ".jpg" in info["url"][-4:] and not ".png" in info["url"][-4:]:
-        return '<head><meta name="theme-color" content="#FF4500"><meta http-equiv="refresh" content="0; url='+path+'"><meta property="og:title" content="'+title+'"><meta property="og:url" content="'+path+'"><meta property="og:video" content="http://'+str(request.host)+'/video/'+path+'"><meta property="og:image" content="'+thumbnail+'"><meta property="og:type" content="video"><meta property="og:video:type" content="video/mp4"><meta property="og:video:width" content="'+str(width)+'"><meta property="og:video:height" content="'+str(height)+'"><meta name="twitter:creator" content="u/'+author+' on '+name+'"></head>'
-    else:
-        return '<head><meta name="theme-color" content="#FF4500"><meta http-equiv="refresh" content="0; url='+path+'"><meta property="og:title" content="'+title+'"><meta property="og:url" content="'+path+'"><meta property="og:image" content="'+url+'"><meta property="og:type" content="image"><meta property="og:image:type" content="image/gif"><meta property="og:image:width" content="'+str(width)+'"><meta property="og:image:height" content="'+str(height)+'"><meta name="twitter:creator" content="u/'+author+' on '+name+'"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image:src" content="'+url+'"></head>'
+                    return redirect(path, code=302)
+    if image_count < 0:
+        if not ".gif" in info["url"][-4:] and not ".jpeg" in info["url"][-5:] and not ".jpg" in info["url"][-4:] and not ".png" in info["url"][-4:]:
+            tags = '<meta property="og:video" content="http://'+str(request.host)+'/video/'+path+'"><meta property="og:type" content="video"><meta property="og:image" content="'+thumbnail+'"><meta property="og:video:type" content="video/mp4"><meta property="og:video:width" content="'+str(width)+'"><meta property="og:video:height" content="'+str(height)+'">'
+        else:
+            tags = '<meta property="og:image" content="'+url+'"><meta property="og:type" content="image"><meta property="og:image:type" content="image/gif"><meta property="og:image:width" content="'+str(width)+'"><meta property="og:image:height" content="'+str(height)+'"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image:src" content="'+url+'">'
+    return '<head><meta name="theme-color" content="#FF4500"><meta property="og:title" content="'+name+' - '+title+'"><meta property="og:url" content="'+path+'"><meta name="og:site_name" content="r.pouekdev.one">'+tags+'</head>'
 
 if __name__ == "__main__":
     app.run(host=os.getenv("HOST") or '0.0.0.0', port=os.getenv("PORT") or 4443)
