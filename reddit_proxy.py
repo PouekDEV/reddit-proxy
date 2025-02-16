@@ -167,8 +167,11 @@ def embed(path):
                 image_count = len(info["media_metadata"])
             tags = '<meta property="og:type" content="image"><meta name="twitter:card" content="summary_large_image"><meta property="og:description" content="Gallery: '+str(len(info["media_metadata"]))+' Images">'
             for i in range(image_count):
-                img = info["media_metadata"][list(info["media_metadata"].keys())[i]]
-                tags = tags + '<meta property="og:image" content="'+img["s"]["u"]+'"><meta property="og:image:width" content="'+str(img["s"]["x"])+'"><meta property="og:image:height" content="'+str(img["s"]["y"])+'"><meta name="twitter:image:src" content="'+str(img["s"]["u"])+'">'
+                try:
+                    img = info["media_metadata"][list(info["media_metadata"].keys())[i]]
+                    tags = tags + '<meta property="og:image" content="'+img["s"]["u"]+'"><meta property="og:image:width" content="'+str(img["s"]["x"])+'"><meta property="og:image:height" content="'+str(img["s"]["y"])+'"><meta name="twitter:image:src" content="'+str(img["s"]["u"])+'">'
+                except (TypeError, KeyError):
+                    pass
         except (TypeError, KeyError):
             pass
     else:
@@ -184,7 +187,7 @@ def embed(path):
                     width = info["preview"]["reddit_video_preview"]["width"]
                     height = info["preview"]["reddit_video_preview"]["height"]
                 except (TypeError, KeyError):
-                    return redirect(path, code=302)
+                    tags = '<meta property="og:image" content="'+thumbnail+'">'
     if image_count < 0:
         if not ".gif" in info["url"][-4:] and not ".jpeg" in info["url"][-5:] and not ".jpg" in info["url"][-4:] and not ".png" in info["url"][-4:]:
             tags = '<meta property="og:video" content="http://'+str(request.host)+'/video/'+path+'"><meta property="og:type" content="video"><meta property="og:image" content="'+thumbnail+'"><meta property="og:video:type" content="video/mp4"><meta property="og:video:width" content="'+str(width)+'"><meta property="og:video:height" content="'+str(height)+'">'
