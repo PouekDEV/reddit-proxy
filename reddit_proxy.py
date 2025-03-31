@@ -18,7 +18,7 @@ cookies = {
     "token_v2": os.getenv("TOKEN_V2"),
 }
 headers = {
-    'User-Agent': 'linux:https://github.com/PouekDEV/reddit-proxy:v1.2.3 (by /u/Pouek_)',
+    'User-Agent': 'linux:https://github.com/PouekDEV/reddit-proxy:v1.2.4 (by /u/Pouek_)',
     'From': 'stuff@pouekdev.one'
 }
 ffmpeg_headers = "User-Agent: "+headers["User-Agent"]+"\r\n"
@@ -60,7 +60,7 @@ def video(path):
     if not "comments" in path:
         r = requests.get(url=path,cookies=cookies,headers=headers)
         soup = BeautifulSoup(r.text, features="html.parser")
-        path = soup.find("shreddit-canonical-url-updater")["value"]
+        path = soup.find("div", {"id": "canonical-url-updater"})["value"]
     try:
         r = requests.get(url=path,cookies=cookies,headers=headers)
         soup = BeautifulSoup(r.text, features="html.parser")
@@ -141,7 +141,7 @@ def embed(path):
     if not "comments" in path:
         r = requests.get(url=path,cookies=cookies,headers=headers)
         soup = BeautifulSoup(r.text, features="html.parser")
-        path = soup.find("shreddit-canonical-url-updater")["value"]
+        path = soup.find("div", {"id": "canonical-url-updater"})["value"]
     if not "Discordbot" in request.headers.get("User-Agent"):
         return redirect(path, code=302)
     if "/" == path[-1]:
