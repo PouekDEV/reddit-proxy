@@ -1,4 +1,8 @@
+from gevent import monkey
+monkey.patch_all()
 from flask import Flask, send_file, request, redirect
+from flask_compress import Compress
+from flask_caching import Cache
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 import requests
@@ -11,14 +15,22 @@ import io
 
 load_dotenv()
 
+config = {
+    "CACHE_TYPE": "SimpleCache",
+    "CACHE_DEFAULT_TIMEOUT": 300
+}
 app = Flask("reddit-proxy")
+app.config.from_mapping(config)
+Compress(app)
+cache = Cache(app)
+
 # We need these just in case reddit blocked our IP
 cookies = {
     "reddit_session": os.getenv("REDDIT_SESSION"),
     "token_v2": os.getenv("TOKEN_V2"),
 }
 headers = {
-    'User-Agent': 'linux:https://github.com/PouekDEV/reddit-proxy:v1.2.4 (by /u/Pouek_)',
+    'User-Agent': 'linux:https://github.com/PouekDEV/reddit-proxy:v1.3.0 (by /u/Pouek_)',
     'From': 'stuff@pouekdev.one'
 }
 ffmpeg_headers = "User-Agent: "+headers["User-Agent"]+"\r\n"
@@ -50,6 +62,7 @@ def favicon():
 
 @app.route('/video/', defaults={'path': ''})
 @app.route('/video/<path:path>')
+@cache.cached()
 def video(path):
     if path == "" or path == None:
         return redirect("https://github.com/PouekDEV/reddit-proxy", code=302)
@@ -131,6 +144,7 @@ def video(path):
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
+@cache.cached()
 def embed(path):
     if path == "" or path == None:
         return redirect("https://github.com/PouekDEV/reddit-proxy", code=302)
@@ -156,6 +170,7 @@ def embed(path):
         thumbnail = ""
     name = info["subreddit_name_prefixed"]
     title = info["title"]
+    title = title.replace('"',"&quot;")
     url = info["url"]
     tags = ""
     image_count = -1
@@ -166,9 +181,12 @@ def embed(path):
             else:
                 image_count = len(info["media_metadata"])
             tags = '<meta property="og:type" content="image"><meta name="twitter:card" content="summary_large_image"><meta property="og:description" content="Gallery: '+str(len(info["media_metadata"]))+' Images">'
+            gallery = []
             for i in range(image_count):
+                gallery.append(info["gallery_data"]["items"][i]["media_id"])
+            for image in gallery:
                 try:
-                    img = info["media_metadata"][list(info["media_metadata"].keys())[i]]
+                    img = info["media_metadata"][image]
                     tags = tags + '<meta property="og:image" content="'+img["s"]["u"]+'"><meta property="og:image:width" content="'+str(img["s"]["x"])+'"><meta property="og:image:height" content="'+str(img["s"]["y"])+'"><meta name="twitter:image:src" content="'+str(img["s"]["u"])+'">'
                 except (TypeError, KeyError):
                     pass
@@ -190,7 +208,7 @@ def embed(path):
                     tags = '<meta property="og:image" content="'+thumbnail+'">'
     if image_count < 0:
         if not ".gif" in info["url"][-4:] and not ".jpeg" in info["url"][-5:] and not ".jpg" in info["url"][-4:] and not ".png" in info["url"][-4:]:
-            tags = '<meta property="og:video" content="http://'+str(request.host)+'/video/'+path+'"><meta property="og:type" content="video"><meta property="og:image" content="'+thumbnail+'"><meta property="og:video:type" content="video/mp4"><meta property="og:video:width" content="'+str(width)+'"><meta property="og:video:height" content="'+str(height)+'">'
+            tags = '<meta property="og:video" content="https://'+str(request.host)+'/video/'+path+'"><meta property="og:type" content="video"><meta property="og:image" content="'+thumbnail+'"><meta property="og:video:type" content="video/mp4"><meta property="og:video:width" content="'+str(width)+'"><meta property="og:video:height" content="'+str(height)+'">'
         else:
             tags = '<meta property="og:image" content="'+url+'"><meta property="og:type" content="image"><meta property="og:image:type" content="image/gif"><meta property="og:image:width" content="'+str(width)+'"><meta property="og:image:height" content="'+str(height)+'"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image:src" content="'+url+'">'
     return '<head><meta name="theme-color" content="#FF4500"><meta property="og:title" content="'+name+' - '+title+'"><meta property="og:url" content="'+path+'"><meta name="og:site_name" content="r.pouekdev.one">'+tags+'</head>'
