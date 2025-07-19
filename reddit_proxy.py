@@ -1,7 +1,6 @@
 from gevent import monkey
 monkey.patch_all()
 from flask import Flask, send_file, request, redirect
-from flask_caching import Cache
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 import requests
@@ -14,10 +13,6 @@ import io
 
 load_dotenv()
 
-config = {
-    "CACHE_TYPE": "SimpleCache",
-    "CACHE_DEFAULT_TIMEOUT": 300
-}
 # We need these just in case reddit blocked our IP
 cookies = {
     "reddit_session": os.getenv("REDDIT_SESSION"),
@@ -47,8 +42,6 @@ for file in files:
         os.remove(directory+file)
 
 app = Flask("reddit-proxy")
-app.config.from_mapping(config)
-cache = Cache(app)
 
 @app.route('/robots.txt')
 def robots():
@@ -141,7 +134,6 @@ def video(path):
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
-@cache.cached()
 def embed(path):
     if path == "" or path == None:
         return redirect("https://github.com/PouekDEV/reddit-proxy", code=302)
