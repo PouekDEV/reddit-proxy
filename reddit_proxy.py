@@ -1,7 +1,6 @@
 from gevent import monkey
 monkey.patch_all()
 from flask import Flask, send_file, request, redirect
-from flask_compress import Compress
 from flask_caching import Cache
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
@@ -19,11 +18,6 @@ config = {
     "CACHE_TYPE": "SimpleCache",
     "CACHE_DEFAULT_TIMEOUT": 300
 }
-app = Flask("reddit-proxy")
-app.config.from_mapping(config)
-Compress(app)
-cache = Cache(app)
-
 # We need these just in case reddit blocked our IP
 cookies = {
     "reddit_session": os.getenv("REDDIT_SESSION"),
@@ -52,6 +46,10 @@ for file in files:
     if ".mp4" in file:
         os.remove(directory+file)
 
+app = Flask("reddit-proxy")
+app.config.from_mapping(config)
+cache = Cache(app)
+
 @app.route('/robots.txt')
 def robots():
     return "User-agent: *\nDisallow: /"
@@ -62,7 +60,6 @@ def favicon():
 
 @app.route('/video/', defaults={'path': ''})
 @app.route('/video/<path:path>')
-@cache.cached()
 def video(path):
     if path == "" or path == None:
         return redirect("https://github.com/PouekDEV/reddit-proxy", code=302)
