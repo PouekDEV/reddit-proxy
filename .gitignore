@@ -1,5 +1,5 @@
 .env
-reddit.html
+*.html
 reddit.json
 __pycache__
 *.mp4
