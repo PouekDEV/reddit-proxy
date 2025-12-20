@@ -1,6 +1,8 @@
 from gevent import monkey
 monkey.patch_all()
 from flask import Flask, send_file, request, redirect
+from flask_compress import Compress
+from flask_caching import Cache
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 import requests
@@ -22,6 +24,11 @@ headers = {
     "User-Agent": "linux:https://github.com/PouekDEV/reddit-proxy:v1.4.0 (by /u/Pouek_)",
     "From": "stuff@pouekdev.one"
 }
+config = {
+    "DEBUG": False,
+    "CACHE_TYPE": "SimpleCache",
+    "CACHE_DEFAULT_TIMEOUT": 300
+}
 ffmpeg_headers = f"User-Agent: {headers['User-Agent']}\r\n"
 combine_audio_video = os.getenv("COMBINE_AUDIO_VIDEO", "False").lower() in ("true", "1", "t")
 directory = os.getenv("DIRECTORY")
@@ -30,9 +37,21 @@ directory = os.getenv("DIRECTORY")
 files = os.listdir(directory)
 for file in files:
     if ".mp4" in file:
-        os.remove(directory+file)
+        if os.path.exists(directory+file):
+            os.remove(directory+file)
+
+def make_key(path=None):
+    if path == None:
+        path = request.url
+    user_agent = request.headers.get("User-Agent")
+    return path + user_agent
 
 app = Flask("reddit-proxy")
+app.config.from_mapping(config)
+cache = Cache(app)
+compress = Compress(app)
+compress.cache = cache
+compress.cache_key = make_key
 
 @app.route('/robots.txt')
 def robots():
@@ -43,6 +62,7 @@ def favicon():
     return "404"
 
 @app.route('/oembed')
+@cache.cached(make_cache_key=make_key)
 def oembed():
     embed = request.args.get("embed")
     if embed != None:
@@ -100,8 +120,10 @@ def video(path):
                             if hls == None:
                                 audio_source = "/CMAF_AUDIO_"
                                 hls = re.search('CMAF_AUDIO_(.*).m3u8',line)
-                            if int(hls.group(1)) > best_hls:
-                                best_hls = int(hls.group(1))
+                                if int(hls.group(1)) > best_hls:
+                                    best_hls = int(hls.group(1))
+                            else:
+                                best_hls = hls.group(1)
                     audio_url = audio_url + audio_source + str(best_hls) + ".mp4"
                     audio = ffmpeg.input(audio_url,headers=ffmpeg_headers)
                     video = ffmpeg.input(url,headers=ffmpeg_headers)
@@ -130,6 +152,7 @@ def video(path):
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
+@cache.cached(make_cache_key=make_key)
 def embed(path):
     if path == "" or path == None:
         return redirect("https://github.com/PouekDEV/reddit-proxy", code=302)
