@@ -44,7 +44,7 @@ def make_key(path=None):
     if path == None:
         path = request.url
     user_agent = request.headers.get("User-Agent")
-    return path + user_agent
+    return f"{path}{user_agent}"
 
 app = Flask("reddit-proxy")
 app.config.from_mapping(config)
@@ -84,9 +84,12 @@ def video(path):
     if path == "" or path == None:
         return redirect("https://github.com/PouekDEV/reddit-proxy", code=302)
     if not "reddit" in path:
-        return 'Not a reddit link'
+        return "Not a reddit link"
     if not "https://" in path:
-        path = path.replace("https:/","https://")
+        if not "https:/" in path:
+            path = f"https://{path}"
+        else:
+            path = path.replace("https:/","https://")
     if not "comments" in path:
         r = requests.get(url=path,cookies=cookies,headers=headers)
         soup = BeautifulSoup(r.text, features="html.parser")
@@ -147,7 +150,7 @@ def video(path):
                 try:
                     url = soup.find("shreddit-player-2")["src"]
                 except (TypeError, KeyError):
-                    return 'There was an error finding media in this post'
+                    return "There was an error finding media in this post"
     return redirect(url, code=302)
 
 @app.route('/', defaults={'path': ''})
@@ -157,15 +160,18 @@ def embed(path):
     if path == "" or path == None:
         return redirect("https://github.com/PouekDEV/reddit-proxy", code=302)
     if not "reddit" in path:
-        return 'Not a reddit link'
+        return "Not a reddit link"
     if not "https://" in path:
-        path = path.replace("https:/","https://")
+        if not "https:/" in path:
+            path = f"https://{path}"
+        else:
+            path = path.replace("https:/","https://")
+    if not "Discordbot" in request.headers.get("User-Agent"):
+        return redirect(path, code=302)
     if not "comments" in path:
         r = requests.get(url=path,cookies=cookies,headers=headers)
         soup = BeautifulSoup(r.text, features="html.parser")
         path = soup.find("div", {"id": "canonical-url-updater"})["value"]
-    if not "Discordbot" in request.headers.get("User-Agent"):
-        return redirect(path, code=302)
     if "/" == path[-1]:
         json_path = path[:-1] + ".json"
     else:
@@ -174,6 +180,7 @@ def embed(path):
     info = json.loads(r.text)[0]["data"]["children"][0]["data"]
     try:
         thumbnail = info["preview"]["images"][0]["source"]["url"]
+        thumbnail = thumbnail.replace("&amp;","&")
     except (TypeError, KeyError):
         thumbnail = ""
     name = info["subreddit_name_prefixed"]
@@ -238,12 +245,16 @@ def embed(path):
                         text_only = True
     if image_count < 0 and not text_only:
         if not ".gif" in info["url"][-4:] and not ".jpeg" in info["url"][-5:] and not ".jpg" in info["url"][-4:] and not ".png" in info["url"][-4:]:
-            tags = f'<meta property="og:video" content="https://{request.host}/video/{path}">' \
+            tags = f'<meta property="og:video" content="/video/{path}">' \
+                f'<meta property="og:video:secure_url" content="/video/{path}">' \
+                f'<meta property="twitter:player" content="/video/{path}">' \
                 '<meta property="og:type" content="video.other">' \
                 f'<meta property="og:image" content="{thumbnail}">' \
                 '<meta property="og:video:type" content="video/mp4">' \
                 f'<meta property="og:video:width" content="{width}">' \
-                f'<meta property="og:video:height" content="{height}">'
+                f'<meta property="og:video:height" content="{height}">' \
+                f'<meta property="twitter:player:width" content="{width}">' \
+                f'<meta property="twitter:player:height" content="{height}">'
         else:
             tags = f'<meta property="og:image" content="{url}">' \
                 f'<meta name="twitter:image:src" content="{url}">' \
@@ -254,7 +265,8 @@ def embed(path):
     if len(description) > 0 or len(gallery_text) > 0:
         tags = tags + f'<meta property="og:description" content="{gallery_text}{description}">' \
                 f'<meta property="twitter:description" content="{gallery_text}{description}">'
-    return '<head>' \
+    return '<html>' \
+        '<head>' \
         '<meta name="theme-color" content="#FF4500">' \
         f'<meta property="og:title" content="u/{user} on {name}">' \
         f'<meta property="twitter:title" content="u/{user} on {name}">' \
@@ -265,7 +277,8 @@ def embed(path):
         '<meta name="og:site_name" content="r.pouekdev.one">' \
         '<meta name="twitter:site" content="r.pouekdev.one">' \
         f"{tags}" \
-        '</head>'
+        '</head>' \
+        '</html>'
 
 if __name__ == "__main__":
     app.run(host=os.getenv("HOST") or '0.0.0.0', port=os.getenv("PORT") or 4443)
