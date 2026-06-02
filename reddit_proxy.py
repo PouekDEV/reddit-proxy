@@ -19,9 +19,10 @@ load_dotenv()
 cookies = {
     "reddit_session": os.getenv("REDDIT_SESSION"),
     "token_v2": os.getenv("TOKEN_V2"),
+    "loid": os.getenv("LOID"), # This is a temporary solution... until it stops working
 }
 headers = {
-    "User-Agent": "linux:https://github.com/PouekDEV/reddit-proxy:v1.4.0 (by /u/Pouek_)",
+    "User-Agent": "linux:https://github.com/PouekDEV/reddit-proxy:v1.5.0 (by /u/Pouek_)",
     "From": "stuff@pouekdev.one"
 }
 config = {
