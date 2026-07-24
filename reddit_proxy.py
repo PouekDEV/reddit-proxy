@@ -22,7 +22,7 @@ cookies = {
     "loid": os.getenv("LOID"), # This is a temporary solution... until it stops working
 }
 headers = {
-    "User-Agent": "linux:https://github.com/PouekDEV/reddit-proxy:v1.5.0 (by /u/Pouek_)",
+    "User-Agent": "linux:https://github.com/PouekDEV/reddit-proxy:v1.5.1 (by /u/Pouek_)",
     "From": "stuff@pouekdev.one"
 }
 config = {
@@ -81,6 +81,7 @@ def oembed():
 
 @app.route('/video/', defaults={'path': ''})
 @app.route('/video/<path:path>')
+@cache.cached(make_cache_key=make_key)
 def video(path):
     if path == "" or path == None:
         return redirect("https://github.com/PouekDEV/reddit-proxy", code=302)
@@ -129,10 +130,10 @@ def video(path):
                             else:
                                 best_hls = hls.group(1)
                     audio_url = audio_url + audio_source + str(best_hls) + ".mp4"
-                    audio = ffmpeg.input(audio_url,headers=ffmpeg_headers)
-                    video = ffmpeg.input(url,headers=ffmpeg_headers)
+                    audio = ffmpeg.input(audio_url,headers=ffmpeg_headers,thread_queue_size=2048)
+                    video = ffmpeg.input(url,headers=ffmpeg_headers,thread_queue_size=2048)
                     try:
-                        ffmpeg.output(audio, video, directory+name+".mp4", format="mp4", vcodec="copy", acodec="copy", crf=27, preset="veryfast").run(overwrite_output=True)
+                        ffmpeg.output(audio, video, directory+name+".mp4", format="mp4", vcodec="copy", acodec="copy", movflags="+faststart").run(overwrite_output=True)
                     except ffmpeg.Error:
                         return redirect(url, code=302)
                     file = open(directory+name+".mp4", "rb")
