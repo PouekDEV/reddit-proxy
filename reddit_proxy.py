@@ -202,13 +202,13 @@ def video(path):
 @app.route('/<path:path>')
 @cache.cached(make_cache_key=make_key)
 def embed(path):
-    # TODO: Think about moving this to pre_check
-    if not "Discordbot" in request.headers.get("User-Agent"):
-        return redirect(path, code=302)
     check = pre_check(path)
     if check[0]:
         return check[1]
     path = check[1]
+    # TODO: Think about moving this to pre_check
+    if not "Discordbot" in request.headers.get("User-Agent"):
+        return redirect(path, code=302)
     if "/" == path[-1]:
         json_path = path[:-1] + ".json"
     else:
