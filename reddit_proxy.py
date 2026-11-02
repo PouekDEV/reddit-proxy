@@ -4,8 +4,8 @@ from flask import Flask, send_file, request, redirect, abort
 from flask_compress import Compress
 from flask_caching import Cache
 from dotenv import load_dotenv
+from curl_cffi import requests
 from bs4 import BeautifulSoup
-import requests
 import ffmpeg
 import base64
 import json
