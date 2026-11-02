@@ -1,6 +1,6 @@
 from gevent import monkey
 monkey.patch_all()
-from flask import Flask, send_file, request, redirect
+from flask import Flask, send_file, request, redirect, abort
 from flask_compress import Compress
 from flask_caching import Cache
 from dotenv import load_dotenv
@@ -22,7 +22,7 @@ cookies = {
     "loid": os.getenv("LOID"), # This is a temporary solution... until it stops working
 }
 headers = {
-    "User-Agent": "linux:https://github.com/PouekDEV/reddit-proxy:v1.5.1 (by /u/Pouek_)",
+    "User-Agent": "linux:https://github.com/PouekDEV/reddit-proxy:v1.6.0 (by /u/Pouek_)",
     "From": "stuff@pouekdev.one"
 }
 config = {
@@ -47,6 +47,52 @@ def make_key(path=None):
     user_agent = request.headers.get("User-Agent")
     return f"{path}{user_agent}"
 
+def oembed_link(title, path):
+    oembed_data = {
+        "type": "link",
+        "author_name": title,
+        "author_url": path,
+        "provider_name": request.host,
+        "version": "1.0"
+    }
+    oembed_data = json.dumps(oembed_data)
+    oembed_data = base64.b64encode(oembed_data.encode()).decode()
+    return f"https://{request.host}/oembed?embed={oembed_data}"
+
+def blocked(path):
+    return '<html>' \
+        '<head>' \
+        '<meta charset="utf-8">' \
+        '<meta name="theme-color" content="#FF4500">' \
+        '<meta property="og:title" content="Sorry">' \
+        '<meta property="twitter:title" content="Sorry">' \
+        '<meta property="twitter:creator" content="We have been blocked by reddit.">' \
+        f'<meta property="og:url" content="{path}">' \
+        f'<link rel="alternate" type="application/json+oembed" title="Sorry" href="{oembed_link("We have been blocked by reddit.", path)}">' \
+        f'<link rel="canonical" href="{path}">' \
+        f'<meta name="og:site_name" content="{request.host}">' \
+        f'<meta name="twitter:site" content="{request.host}">' \
+        '</head>' \
+        '</html>'
+
+def pre_check(path):
+    if path == "" or path == None:
+        return (True, redirect("https://github.com/PouekDEV/reddit-proxy", code=302))
+    if not "reddit" in path:
+        return (True, "Not a reddit link")
+    if not "https://" in path:
+        if not "https:/" in path:
+            path = f"https://{path}"
+        else:
+            path = path.replace("https:/","https://")
+    if not "comments" in path:
+        r = requests.get(url=path,cookies=cookies,headers=headers)
+        if r.status_code == 403:
+            return (True, blocked(path))
+        soup = BeautifulSoup(r.text, features="html.parser")
+        path = soup.find("div", {"id": "canonical-url-updater"})["value"]
+    return (False, path)
+
 app = Flask("reddit-proxy")
 app.config.from_mapping(config)
 cache = Cache(app)
@@ -60,7 +106,7 @@ def robots():
 
 @app.route('/favicon.ico')
 def favicon():
-    return "404"
+    abort(404)
 
 @app.route('/oembed')
 @cache.cached(make_cache_key=make_key)
@@ -83,21 +129,14 @@ def oembed():
 @app.route('/video/<path:path>')
 @cache.cached(make_cache_key=make_key)
 def video(path):
-    if path == "" or path == None:
-        return redirect("https://github.com/PouekDEV/reddit-proxy", code=302)
-    if not "reddit" in path:
-        return "Not a reddit link"
-    if not "https://" in path:
-        if not "https:/" in path:
-            path = f"https://{path}"
-        else:
-            path = path.replace("https:/","https://")
-    if not "comments" in path:
-        r = requests.get(url=path,cookies=cookies,headers=headers)
-        soup = BeautifulSoup(r.text, features="html.parser")
-        path = soup.find("div", {"id": "canonical-url-updater"})["value"]
+    check = pre_check(path)
+    if check[0]:
+        return check[1]
+    path = check[1]
     try:
         r = requests.get(url=path,cookies=cookies,headers=headers)
+        if r.status_code == 403:
+            return blocked(path)
         soup = BeautifulSoup(r.text, features="html.parser")
         info = json.loads(soup.find("shreddit-player-2")["packaged-media-json"])["playbackMp4s"]["permutations"]
         url = info[len(info)-1]["source"]["url"]
@@ -109,6 +148,10 @@ def video(path):
             json_path = path + ".json"
         r = requests.get(url=json_path,cookies=cookies,headers=headers)
         info = json.loads(r.text)[0]["data"]["children"][0]["data"]
+        try:
+            info = info["crosspost_parent_list"][0]
+        except (TypeError, KeyError):
+            pass
         try:
             name = info["url"].replace("https://v.redd.it/","")
             url = info["media"]["reddit_video"]["fallback_url"]
@@ -133,7 +176,7 @@ def video(path):
                     audio = ffmpeg.input(audio_url,headers=ffmpeg_headers,thread_queue_size=2048)
                     video = ffmpeg.input(url,headers=ffmpeg_headers,thread_queue_size=2048)
                     try:
-                        ffmpeg.output(audio, video, directory+name+".mp4", format="mp4", vcodec="copy", acodec="copy", movflags="+faststart").run(overwrite_output=True)
+                        ffmpeg.output(audio, video, directory+name+".mp4", format="mp4", vcodec="copy", acodec="copy").run(overwrite_output=True)
                     except ffmpeg.Error:
                         return redirect(url, code=302)
                     file = open(directory+name+".mp4", "rb")
@@ -159,32 +202,34 @@ def video(path):
 @app.route('/<path:path>')
 @cache.cached(make_cache_key=make_key)
 def embed(path):
-    if path == "" or path == None:
-        return redirect("https://github.com/PouekDEV/reddit-proxy", code=302)
-    if not "reddit" in path:
-        return "Not a reddit link"
-    if not "https://" in path:
-        if not "https:/" in path:
-            path = f"https://{path}"
-        else:
-            path = path.replace("https:/","https://")
+    # TODO: Think about moving this to pre_check
     if not "Discordbot" in request.headers.get("User-Agent"):
         return redirect(path, code=302)
-    if not "comments" in path:
-        r = requests.get(url=path,cookies=cookies,headers=headers)
-        soup = BeautifulSoup(r.text, features="html.parser")
-        path = soup.find("div", {"id": "canonical-url-updater"})["value"]
+    check = pre_check(path)
+    if check[0]:
+        return check[1]
+    path = check[1]
     if "/" == path[-1]:
         json_path = path[:-1] + ".json"
     else:
         json_path = path + ".json"
     r = requests.get(url=json_path,cookies=cookies,headers=headers)
+    if r.status_code == 403:
+        return blocked(path)
     info = json.loads(r.text)[0]["data"]["children"][0]["data"]
+    try:
+        info = info["crosspost_parent_list"][0]
+    except (TypeError, KeyError):
+        pass
     try:
         thumbnail = info["preview"]["images"][0]["source"]["url"]
         thumbnail = thumbnail.replace("&amp;","&")
     except (TypeError, KeyError):
-        thumbnail = ""
+        try:
+            thumbnail = info["thumbnail"]
+            thumbnail = thumbnail.replace("&amp;","&")
+        except (TypeError, KeyError):
+            thumbnail = ""
     name = info["subreddit_name_prefixed"]
     user = info["author"]
     description = info["selftext"]
@@ -194,17 +239,9 @@ def embed(path):
     url = info["url"]
     tags = ""
     image_count = -1
-    oembed_data = {
-        "type": "link",
-        "author_name": title,
-        "author_url": path,
-        "provider_name": "r.pouekdev.one",
-        "version": "1.0"
-    }
-    oembed_data = json.dumps(oembed_data)
-    oembed_data = base64.b64encode(oembed_data.encode()).decode()
-    oembed_link = f"https://{request.host}/oembed?embed={oembed_data}"
     text_only = False
+    width = None
+    height = None
     if "gallery" in url:
         try:
             if len(info["media_metadata"]) > 4:
@@ -245,39 +282,54 @@ def embed(path):
                         tags = f'<meta property="og:image" content="{thumbnail}">'
                     else:
                         text_only = True
-    if image_count < 0 and not text_only:
-        if not ".gif" in info["url"][-4:] and not ".jpeg" in info["url"][-5:] and not ".jpg" in info["url"][-4:] and not ".png" in info["url"][-4:]:
-            tags = f'<meta property="og:video" content="/video/{path}">' \
-                f'<meta property="og:video:secure_url" content="/video/{path}">' \
-                f'<meta property="twitter:player" content="/video/{path}">' \
-                '<meta property="og:type" content="video.other">' \
-                f'<meta property="og:image" content="{thumbnail}">' \
-                '<meta property="og:video:type" content="video/mp4">' \
-                f'<meta property="og:video:width" content="{width}">' \
-                f'<meta property="og:video:height" content="{height}">' \
-                f'<meta property="twitter:player:width" content="{width}">' \
-                f'<meta property="twitter:player:height" content="{height}">'
-        else:
-            tags = f'<meta property="og:image" content="{url}">' \
-                f'<meta name="twitter:image:src" content="{url}">' \
-                '<meta property="og:type" content="photo">' \
-                f'<meta property="og:image:width" content="{width}">' \
-                f'<meta property="og:image:height" content="{height}">' \
-                '<meta name="twitter:card" content="summary_large_image">'
+    if image_count < 0 and not text_only and width != None and height != None:
+        try:
+            media_metadata = info["media_metadata"]
+        except (TypeError, KeyError):
+            media_metadata = None
+        if media_metadata == None:
+            if "v.redd.it" in url:
+                tags = '<meta name="twitter:card" content="player">' \
+                    f'<meta property="og:video" content="/video/{path}">' \
+                    f'<meta property="og:video:url" content="/video/{path}">' \
+                    f'<meta property="og:video:secure_url" content="/video/{path}">' \
+                    f'<meta property="twitter:player" content="/video/{path}">' \
+                    f'<meta property="twitter:player:stream" content="/video/{path}">' \
+                    '<meta property="og:type" content="video.other">' \
+                    f'<meta property="og:image" content="{thumbnail}">' \
+                    f'<meta name="twitter:image" content="{thumbnail}">' \
+                    '<meta property="og:video:type" content="video/mp4">' \
+                    '<meta name="twitter:player:stream:content_type" content="video/mp4">' \
+                    f'<meta property="og:video:width" content="{width}">' \
+                    f'<meta property="og:video:height" content="{height}">' \
+                    f'<meta property="twitter:player:width" content="{width}">' \
+                    f'<meta property="twitter:player:height" content="{height}">'
+            else:
+                if not ".gif" in info["url"][-4:] and not ".jpeg" in info["url"][-5:] and not ".jpg" in info["url"][-4:] and not ".png" in info["url"][-4:]:
+                    embed_image = thumbnail
+                else:
+                    embed_image = url
+                tags = f'<meta property="og:image" content="{embed_image}">' \
+                    f'<meta name="twitter:image:src" content="{embed_image}">' \
+                    '<meta property="og:type" content="photo">' \
+                    f'<meta property="og:image:width" content="{width}">' \
+                    f'<meta property="og:image:height" content="{height}">' \
+                    '<meta name="twitter:card" content="summary_large_image">'
     if len(description) > 0 or len(gallery_text) > 0:
         tags = tags + f'<meta property="og:description" content="{gallery_text}{description}">' \
                 f'<meta property="twitter:description" content="{gallery_text}{description}">'
     return '<html>' \
         '<head>' \
+        '<meta charset="utf-8">' \
         '<meta name="theme-color" content="#FF4500">' \
         f'<meta property="og:title" content="u/{user} on {name}">' \
         f'<meta property="twitter:title" content="u/{user} on {name}">' \
         f'<meta property="twitter:creator" content="{title}">' \
         f'<meta property="og:url" content="{path}">' \
-        f'<link rel="alternate" type="application/json+oembed" title="u/{user} on {name}" href="{oembed_link}">' \
+        f'<link rel="alternate" type="application/json+oembed" title="u/{user} on {name}" href="{oembed_link(title, path)}">' \
         f'<link rel="canonical" href="{path}">' \
-        '<meta name="og:site_name" content="r.pouekdev.one">' \
-        '<meta name="twitter:site" content="r.pouekdev.one">' \
+        f'<meta name="og:site_name" content="{request.host}">' \
+        f'<meta name="twitter:site" content="{request.host}">' \
         f"{tags}" \
         '</head>' \
         '</html>'
